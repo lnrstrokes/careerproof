@@ -1,0 +1,6 @@
+{
+  "name": "Canadian Tech Job Engine & NOC Navigator",
+  "description": "Canadian Tech Job Search & Immigration Navigation Engine for international tech professionals with truthful NOC alignment.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
