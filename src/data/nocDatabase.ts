@@ -1,4 +1,4 @@
-import { NocCodeInfo } from '../types';
+import { NocCodeInfo } from '../../server/schema';
 
 export const NOC_2021_TECH_CODES: NocCodeInfo[] = [
   {

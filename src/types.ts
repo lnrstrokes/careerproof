@@ -1,59 +1,31 @@
-export interface WorkExperience {
-  id: string;
-  company: string;
-  role: string;
-  startDate: string;
-  endDate: string;
-  bullets: string[];
-  hasReferenceLetter: boolean;
-  hasPayslips: boolean;
-  isVerified: boolean;
-}
+/**
+ * Shared client-side types. The AlignmentBrief contract lives in
+ * server/schema.ts (pure zod + TS, safe to import type-only from src/).
+ */
+export type {
+  AlignmentBrief,
+  AnalyzeInput,
+  AnalyzeRequestBody,
+  CandidateEvidence,
+  EvidenceStatus,
+  NocCandidate,
+  Requirement,
+} from '../server/schema';
 
-export interface CandidateInput {
-  resumeText: string;
-  jobDescriptionText: string;
-  jobTitle: string;
-  companyName: string;
-  targetCity: string;
-  deadlineDays: number;
-  deadlineDate: string;
-  currentNocCode?: string;
-  educationDegree: string;
-  hasWesEca: boolean;
-  experiences: WorkExperience[];
-}
+export type AppTab = 'assessment' | 'noc-directory' | 'ats-cv';
 
-export interface NocCodeInfo {
-  code: string;
-  title: string;
-  teer: number;
-  leadStatement: string;
-  mainDuties: string[];
-  exampleTitles: string[];
-  expressEntryEligible: boolean;
-  pnpHighDemandProvinces: string[];
-}
-
-export interface PresetScenario {
-  id: string;
-  title: string;
-  description: string;
-  targetRole: string;
-  targetCity: string;
-  deadlineDays: number;
-  deadlineDate: string;
-  resumeText: string;
-  jobDescriptionText: string;
-  educationDegree: string;
-  hasWesEca: boolean;
-  experiences: WorkExperience[];
-}
-
+/** POST /api/analyze success payload. */
 export interface AnalysisResponse {
-  markdownAnalysis: string;
-  matchScore?: number;
-  targetRole?: string;
-  recommendedNoc?: string;
-  criticalDealbreakersCount?: number;
+  success: true;
+  brief: import('../server/schema').AlignmentBrief;
 }
+
+/** POST /api/analyze error payload (the only alternative to success). */
+export interface AnalysisErrorPayload {
+  success: false;
+  code: 'INVALID_INPUT' | 'PAYLOAD_TOO_LARGE' | 'AI_INVALID_OUTPUT' | 'AI_UNAVAILABLE';
+  message: string;
+  fields?: string[];
+}
+
+export type AnalysisResultPayload = AnalysisResponse | AnalysisErrorPayload;
