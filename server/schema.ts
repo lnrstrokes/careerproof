@@ -86,14 +86,23 @@ export interface AlignmentBrief {
 
 /** Shape of one entry in src/data/nocDatabase.ts (local reference data). */
 export interface NocCodeInfo {
+  /** Five-digit NOC 2021 unit group code. */
   code: string;
+  /** Official unit group title, copied verbatim from the NOC 2021 dataset. */
   title: string;
+  /** Training, Education, Experience and Responsibilities level (0-5).
+   *  Equal to the second digit of the code per the official NOC structure. */
   teer: number;
+  /** Broad occupational category digit ('0'-'9') of the official structure. */
+  category: string;
+  /** Human-readable name of the broad category. */
+  categoryLabel: string;
+  /** Official lead statement, copied verbatim from the NOC 2021 dataset. */
   leadStatement: string;
-  mainDuties: string[];
+  /** Informal search helper labels; not part of the official entry. */
   exampleTitles: string[];
-  expressEntryEligible: boolean;
-  pnpHighDemandProvinces: string[];
+  /** Official ESDC profile URL for verification. */
+  profileUrl: string;
 }
 
 /** Raw request body accepted by POST /api/analyze (before normalization). */

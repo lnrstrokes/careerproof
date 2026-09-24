@@ -126,7 +126,10 @@ CareerProof cannot and does not tell you any of the following:
   either the advert text or the CV/statements you supplied. If you did not
   write it, the tool treats it as *Not determined*.
 
-The NOC reference list in `src/data/nocDatabase.ts` is illustrative local
-data covering a handful of occupations. NOC codes shown in a brief are
-candidates to verify against the official Government of Canada NOC, never
+The NOC reference set in `src/data/nocDatabase.ts` is a curated, categorized
+subset of the official NOC 2021 classification: 174 occupations across all ten
+broad categories, with titles and lead statements copied verbatim from the
+official dataset and a link to each entry's official ESDC profile. Informal
+"common job titles" labels are search helpers only. NOC codes shown in a brief
+are candidates to verify against the official Government of Canada NOC, never
 conclusions.

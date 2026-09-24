@@ -9,6 +9,7 @@ export type {
   CandidateEvidence,
   EvidenceStatus,
   NocCandidate,
+  NocCodeInfo,
   Requirement,
 } from '../server/schema';
 
