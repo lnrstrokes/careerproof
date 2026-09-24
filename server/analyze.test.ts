@@ -19,7 +19,7 @@ vi.mock('./groq', () => ({
 }));
 
 vi.mock('../src/data/nocDatabase', () => ({
-  NOC_2021_TECH_CODES: [{ code: '21232', title: 'Software Developers and Programmers' }],
+  NOC_2021_REFERENCE: [{ code: '21232', title: 'Software developers and programmers', teer: 1, category: '2', categoryLabel: 'Natural and applied sciences and related occupations', leadStatement: 'x', exampleTitles: [], profileUrl: 'https://noc.esdc.gc.ca' }],
 }));
 
 import { runAnalysis } from './analyze';

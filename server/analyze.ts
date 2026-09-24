@@ -78,10 +78,10 @@ export async function runAnalysis(
   // 2. NOC integrity: unknown codes become 'model_asserted' with confidence
   //    capped at 'low' plus an unresolvedQuestion. Import here to avoid a
   //    client-bundle dependency on the database file.
-  const { NOC_2021_TECH_CODES } = await import('../src/data/nocDatabase');
+  const { NOC_2021_REFERENCE } = await import('../src/data/nocDatabase');
   const { nocCandidates, extraUnresolvedQuestions } = enforceNocIntegrity(
     modelBrief.interpretation.nocCandidates,
-    NOC_2021_TECH_CODES.map((noc) => noc.code),
+    NOC_2021_REFERENCE.map((noc) => noc.code),
   );
 
   const brief: AlignmentBrief = {
