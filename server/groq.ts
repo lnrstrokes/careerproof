@@ -19,22 +19,22 @@ const GROQ_BASE_URL =
   );
 
 /**
- * Current Groq production models, most capable first. Cascade order:
- * - llama-3.3-70b-versatile: strongest general model, default choice
- * - openai/gpt-oss-120b: strong open-weight fallback
- * - openai/gpt-oss-20b: fast mid-tier fallback
- * - llama-3.1-8b-instant: last-resort availability fallback
+ * Current Groq production chat models, most capable first. Cascade order:
+ * - openai/gpt-oss-120b: strongest available model, default choice
+ * - qwen/qwen3.8-27b: strong fallback with a large context window
+ * - openai/gpt-oss-20b: fast last-resort fallback
+ * (Verified against the live /openai/v1/models endpoint. The llama-3.x
+ * models in the previous cascade were retired by Groq.)
  */
 export const MODEL_CASCADE = [
-  'llama-3.3-70b-versatile',
   'openai/gpt-oss-120b',
+  'qwen/qwen3.8-27b',
   'openai/gpt-oss-20b',
-  'llama-3.1-8b-instant',
 ] as const;
 
 export const GENERATION_TEMPERATURE = 0.2;
 export const MAX_OUTPUT_TOKENS = 8192;
-const ATTEMPTS_PER_MODEL = 2;
+const ATTEMPTS_PER_MODEL = 3;
 const RETRY_DELAY_MS = 500;
 const REQUEST_TIMEOUT_MS = 45_000;
 

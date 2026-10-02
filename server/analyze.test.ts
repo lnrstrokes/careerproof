@@ -13,7 +13,7 @@ import {
 
 vi.mock('./groq', () => ({
   generateStructured: vi.fn(),
-  MODEL_CASCADE: ['llama-3.3-70b-versatile'],
+  MODEL_CASCADE: ['openai/gpt-oss-120b'],
   GENERATION_TEMPERATURE: 0.2,
   MAX_OUTPUT_TOKENS: 8192,
 }));
