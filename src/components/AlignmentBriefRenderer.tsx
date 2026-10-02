@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  AlertTriangle,
   Ban,
   CheckCircle2,
   ChevronDown,
@@ -11,11 +10,13 @@ import {
   Scale,
   ShieldAlert,
   Quote,
+  Sparkles,
+  Target,
 } from 'lucide-react';
 import type { AlignmentBrief, EvidenceStatus, Requirement } from '../types';
 
 // ---------------------------------------------------------------------------
-// Status metadata + legend (plain language, no scores anywhere)
+// Status metadata (plain language, no scores anywhere)
 // ---------------------------------------------------------------------------
 
 const STATUS_META: Record<
@@ -24,8 +25,7 @@ const STATUS_META: Record<
 > = {
   supported: {
     label: 'Supported',
-    plain:
-      'Your own text, quoted below, shows you meet this requirement.',
+    plain: 'Your own text, quoted below, shows you meet this requirement.',
     badge: 'bg-emerald-950 text-emerald-300 border-emerald-800',
     icon: <CheckCircle2 className="w-3.5 h-3.5" />,
   },
@@ -46,7 +46,7 @@ const STATUS_META: Record<
   unknown: {
     label: 'Not determined',
     plain:
-      'Your input says nothing about this. That is not the same as missing it.',
+      'Your CV says nothing about this. That is not the same as missing it.',
     badge: 'bg-slate-800 text-slate-300 border-slate-600',
     icon: <HelpCircle className="w-3.5 h-3.5" />,
   },
@@ -59,143 +59,245 @@ const STATUS_META: Record<
   },
 };
 
-const StatusLegend: React.FC = () => (
-  <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2.5">
-    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
-      <Info className="w-3.5 h-3.5 text-sky-400" />
-      <span>What the status labels mean</span>
-    </h4>
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-      {(Object.keys(STATUS_META) as EvidenceStatus[]).map((status) => {
-        const meta = STATUS_META[status];
-        return (
-          <div key={status} className="flex items-start space-x-2 text-xs">
-            <span
-              className={`shrink-0 inline-flex items-center space-x-1 px-2 py-0.5 rounded border font-semibold ${meta.badge}`}
+const StatusBadge: React.FC<{ status: EvidenceStatus }> = ({ status }) => {
+  const meta = STATUS_META[status];
+  return (
+    <span
+      className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-bold ${meta.badge}`}
+    >
+      {meta.icon}
+      <span>{meta.label}</span>
+    </span>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Verdict banner: instant answer, then a detailed plain-language summary
+// ---------------------------------------------------------------------------
+
+type Verdict = {
+  tone: 'ready' | 'almost' | 'gaps';
+  headline: string;
+  subline: string;
+  banner: string;
+};
+
+function computeVerdict(brief: AlignmentBrief): Verdict {
+  const all = [...brief.requirements, ...brief.hardConstraints];
+  const mandatory = all.filter((r) => r.importance === 'mandatory');
+  const mandatoryMissing = mandatory.filter((r) => r.status === 'missing');
+  const mandatoryUnknown = mandatory.filter((r) => r.status === 'unknown');
+  const hardConstraints = brief.hardConstraints.filter(
+    (r) => r.status === 'hard_constraint',
+  );
+
+  if (mandatoryMissing.length > 0) {
+    return {
+      tone: 'gaps',
+      headline: 'Not yet - your CV shows clear gaps against this job',
+      subline: `${mandatoryMissing.length} mandatory requirement${mandatoryMissing.length === 1 ? '' : 's'} your CV shows you do not meet. Read the gaps below before spending time on this application.`,
+      banner:
+        'bg-red-950/30 border-red-900/70 text-red-200',
+    };
+  }
+  if (mandatoryUnknown.length > 0 || hardConstraints.length > 0) {
+    return {
+      tone: 'almost',
+      headline: 'Close - your CV covers the core, a few things need confirming',
+      subline: `Your CV supports the key requirements, but ${mandatoryUnknown.length + hardConstraints.length} item${mandatoryUnknown.length + hardConstraints.length === 1 ? '' : 's'} cannot be proven from text alone. Confirm those and you can apply with confidence.`,
+      banner:
+        'bg-amber-950/25 border-amber-900/70 text-amber-200',
+    };
+  }
+  return {
+    tone: 'ready',
+    headline: 'Strong fit - your CV supports every requirement we could check',
+    subline: 'Every quoted requirement is backed by your own CV text below. Verify the official details, then apply.',
+    banner:
+      'bg-emerald-950/30 border-emerald-900/70 text-emerald-200',
+  };
+}
+
+const SummarySection: React.FC<{ brief: AlignmentBrief }> = ({ brief }) => {
+  const verdict = computeVerdict(brief);
+  const all = [...brief.requirements, ...brief.hardConstraints];
+  const mandatory = all.filter((r) => r.importance === 'mandatory');
+  const preferred = all.filter((r) => r.importance !== 'mandatory');
+
+  const supportedCount = all.filter((r) => r.status === 'supported').length;
+  const transferableCount = all.filter((r) => r.status === 'transferable').length;
+  const missingCount = all.filter((r) => r.status === 'missing').length;
+  const unknownCount = all.filter((r) => r.status === 'unknown').length;
+  const verifyCount = brief.hardConstraints.filter(
+    (r) => r.status === 'hard_constraint',
+  ).length;
+
+  const mandatoryCovered = mandatory.filter(
+    (r) => r.status === 'supported' || r.status === 'transferable',
+  );
+
+  const verdictIcon =
+    verdict.tone === 'ready' ? (
+      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+    ) : verdict.tone === 'almost' ? (
+      <ShieldAlert className="w-5 h-5 text-amber-400" />
+    ) : (
+      <FileWarning className="w-5 h-5 text-red-400" />
+    );
+
+  return (
+    <div className="space-y-4">
+      {/* Verdict banner */}
+      <div className={`p-5 rounded-2xl border ${verdict.banner} space-y-1.5`}>
+        <div className="flex items-start space-x-2.5">
+          {verdictIcon}
+          <div className="space-y-1">
+            <h3 className="text-base font-black leading-snug">{verdict.headline}</h3>
+            <p className="text-xs leading-relaxed opacity-90">{verdict.subline}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tally bar: numbers of requirements in each state (not a score) */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        {(
+          [
+            ['supported', supportedCount],
+            ['transferable', transferableCount],
+            ['missing', missingCount],
+            ['unknown', unknownCount],
+            ['hard_constraint', verifyCount],
+          ] as Array<[EvidenceStatus, number]>
+        ).map(([status, count]) => {
+          const meta = STATUS_META[status];
+          return (
+            <div
+              key={status}
+              className={`p-3 rounded-xl border ${meta.badge.split(' ').slice(0, 1).join(' ')} bg-opacity-40 flex flex-col items-center text-center space-y-0.5`}
             >
               {meta.icon}
-              <span>{meta.label}</span>
-            </span>
-            <span className="text-slate-400 leading-relaxed">{meta.plain}</span>
-          </div>
-        );
-      })}
+              <span className="text-xl font-black leading-none">{count}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide opacity-80">
+                {meta.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Detailed plain-language summary */}
+      <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
+          <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+          <span>In plain words</span>
+        </h4>
+        <div className="text-xs text-slate-300 leading-relaxed space-y-2">
+          <p>
+            The advert &ldquo;<span className="text-slate-100 font-semibold">{brief.posting.title}</span>&rdquo;
+            {' '}lists {all.length} requirement{all.length === 1 ? '' : 's'} we could quote
+            {mandatory.length > 0 && ` (${mandatory.length} mandatory${preferred.length > 0 ? `, ${preferred.length} preferred` : ''})`}.
+            Your CV clearly supports <span className="text-emerald-300 font-semibold">{supportedCount}</span>
+            {supportedCount === 1 ? ' of them' : ` of them`}
+            {transferableCount > 0 && (
+              <>
+                , with <span className="text-sky-300 font-semibold">{transferableCount}</span> close-but-not-exact
+              </>
+            )}
+            .
+          </p>
+          {mandatoryCovered.length > 0 && (
+            <p>
+              The core requirements your CV proves:{' '}
+              <span className="text-slate-100">
+                {mandatoryCovered.map((r) => r.text.replace(/\.$/, '')).join('; ')}.
+              </span>
+            </p>
+          )}
+          {missingCount > 0 && (
+            <p>
+              Your CV shows you do not meet{' '}
+              <span className="text-red-300 font-semibold">{missingCount}</span>{' '}
+              requirement{missingCount === 1 ? '' : 's'} - these are real gaps, not
+              just things your CV forgot to mention.
+            </p>
+          )}
+          {unknownCount > 0 && (
+            <p>
+              For <span className="text-slate-100 font-semibold">{unknownCount}</span>{' '}
+              requirement{unknownCount === 1 ? '' : 's'}, your CV is silent - the tool
+              cannot tell either way. If you actually have this evidence, add it to
+              your CV and analyze again; the status only changes when it can quote you.
+            </p>
+          )}
+          {verifyCount > 0 && (
+            <p>
+              <span className="text-amber-300 font-semibold">{verifyCount}</span>{' '}
+              item{verifyCount === 1 ? '' : 's'} - licences, registration, or
+              scheduling - cannot be proven from any document. Only the official
+              source (the regulator or the employer) can confirm those.
+            </p>
+          )}
+        </div>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // ---------------------------------------------------------------------------
-// Critical gaps + areas to strengthen (no scores - grouped requirement lists)
+// Warning strip for gaps (certification / licence / etc.) - shown inline
 // ---------------------------------------------------------------------------
 
-const CriticalGaps: React.FC<{ brief: AlignmentBrief }> = ({ brief }) => {
-  const all = [...brief.hardConstraints, ...brief.requirements];
-
-  // Gaps: mandatory requirements the input does not establish - either plainly
-  // missing (the input contradicts/excludes them) or not determined (silent).
+const GapWarnings: React.FC<{ brief: AlignmentBrief }> = ({ brief }) => {
+  const all = [...brief.requirements, ...brief.hardConstraints];
   const gaps = all.filter(
     (r) => r.importance === 'mandatory' && (r.status === 'missing' || r.status === 'unknown'),
   );
 
-  // Strengthen: requirements met only partially (transferable) or non-mandatory
-  // items the input does not establish. Each gets a concrete, non-writing step.
-  const strengthen = all.filter(
-    (r) =>
-      r.status === 'transferable' ||
-      (r.importance !== 'mandatory' && (r.status === 'missing' || r.status === 'unknown')),
-  );
-
-  if (gaps.length === 0 && strengthen.length === 0) return null;
+  if (gaps.length === 0) return null;
 
   return (
-    <>
-      {gaps.length > 0 && (
-        <section className="p-5 rounded-2xl bg-red-950/20 border border-red-900/60 space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-red-300 flex items-center space-x-1.5">
-            <FileWarning className="w-4 h-4" />
-            <span>Critical gaps - mandatory requirements your CV does not establish</span>
-          </h3>
-          <ul className="space-y-2.5">
-            {gaps.map((req) => (
-              <li
-                key={`gap-${req.id}`}
-                className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs space-y-1.5"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-bold ${STATUS_META[req.status].badge}`}
-                  >
-                    {STATUS_META[req.status].icon}
-                    <span>{STATUS_META[req.status].label}</span>
-                  </span>
-                  <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">
-                    {req.type} · mandatory
-                  </span>
-                </div>
-                <p className="text-slate-100 font-semibold leading-snug">{req.text}</p>
-                <p className="text-slate-400 italic leading-relaxed">&ldquo;{req.sourceQuote}&rdquo;</p>
-                {req.status === 'missing' ? (
-                  req.action && (
-                    <p className="text-amber-200/90 leading-relaxed">{req.action}</p>
-                  )
-                ) : (
-                  (req.verificationQuestion ?? req.action) && (
-                    <p className="text-amber-200/90 leading-relaxed">
-                      {req.verificationQuestion ?? req.action}
-                    </p>
-                  )
-                )}
-              </li>
-            ))}
-          </ul>
-          <p className="text-[11px] text-slate-500 leading-relaxed">
-            &ldquo;Not determined&rdquo; is not the same as missing: it means your CV was silent.
-            If you have evidence for any item, add it to your CV text and analyze again -
-            the status only changes when you can quote it.
-          </p>
-        </section>
-      )}
-
-      {strengthen.length > 0 && (
-        <section className="p-5 rounded-2xl bg-sky-950/20 border border-sky-900/60 space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-sky-300 flex items-center space-x-1.5">
-            <Scale className="w-4 h-4" />
-            <span>Areas to strengthen - close these before applying</span>
-          </h3>
-          <ul className="space-y-2.5">
-            {strengthen.map((req) => (
-              <li
-                key={`strength-${req.id}`}
-                className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs space-y-1.5"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-bold ${STATUS_META[req.status].badge}`}
-                  >
-                    {STATUS_META[req.status].icon}
-                    <span>{STATUS_META[req.status].label}</span>
-                  </span>
-                  <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">
-                    {req.type} · {req.importance}
-                  </span>
-                </div>
-                <p className="text-slate-100 font-semibold leading-snug">{req.text}</p>
-                {req.rationale && (
-                  <p className="text-slate-400 leading-relaxed">{req.rationale}</p>
-                )}
-                {req.action && (
-                  <p className="text-sky-200/90 leading-relaxed">{req.action}</p>
-                )}
-              </li>
-            ))}
-          </ul>
-          <p className="text-[11px] text-slate-500 leading-relaxed">
-            These are judgement calls based only on what you provided. Verify every
-            requirement with the official source before acting on it.
-          </p>
-        </section>
-      )}
-    </>
+    <section className="p-5 rounded-2xl bg-red-950/20 border border-red-900/60 space-y-3">
+      <h3 className="text-xs font-bold uppercase tracking-wider text-red-300 flex items-center space-x-1.5">
+        <FileWarning className="w-4 h-4" />
+        <span>
+          Gaps - mandatory requirements your CV does not establish
+        </span>
+      </h3>
+      <ul className="space-y-2.5">
+        {gaps.map((req) => (
+          <li
+            key={`gap-${req.id}`}
+            className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs space-y-2"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={req.status} />
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">
+                {req.type === 'certification'
+                  ? 'certification warning'
+                  : req.type === 'licence'
+                    ? 'licence warning'
+                    : `${req.type} · mandatory`}
+              </span>
+            </div>
+            <p className="text-slate-100 font-semibold leading-snug">{req.text}</p>
+            <p className="text-slate-400 italic leading-relaxed">
+              &ldquo;{req.sourceQuote}&rdquo;
+            </p>
+            <div className="pt-1 border-t border-slate-800/70 flex items-start space-x-2">
+              <Target className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-amber-200/90 leading-relaxed">
+                {req.verificationQuestion ?? req.action ?? 'Add the missing evidence to your CV and analyze again.'}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="text-[11px] text-slate-500 leading-relaxed">
+        &ldquo;Not determined&rdquo; is not the same as missing: it means your CV was
+        silent. If you have the evidence, add it to your CV and analyze again - the
+        status only changes when it can quote you.
+      </p>
+    </section>
   );
 };
 
@@ -208,7 +310,6 @@ const RequirementCard: React.FC<{ requirement: Requirement; defaultOpen: boolean
   defaultOpen,
 }) => {
   const [open, setOpen] = useState(defaultOpen);
-  const meta = STATUS_META[requirement.status];
   const hasEvidence = requirement.candidateEvidence.length > 0;
 
   return (
@@ -219,12 +320,7 @@ const RequirementCard: React.FC<{ requirement: Requirement; defaultOpen: boolean
       >
         <div className="space-y-1.5 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-bold ${meta.badge}`}
-            >
-              {meta.icon}
-              <span>{meta.label}</span>
-            </span>
+            <StatusBadge status={requirement.status} />
             <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">
               {requirement.type} · {requirement.importance}
             </span>
@@ -242,7 +338,6 @@ const RequirementCard: React.FC<{ requirement: Requirement; defaultOpen: boolean
 
       {open && (
         <div className="px-4 pb-4 space-y-3 text-xs border-t border-slate-800/70 pt-3">
-          {/* The advert quote */}
           <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-1">
               <Quote className="w-3 h-3" />
@@ -253,29 +348,22 @@ const RequirementCard: React.FC<{ requirement: Requirement; defaultOpen: boolean
             </p>
           </div>
 
-          {/* The candidate evidence */}
           <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-1">
               <Quote className="w-3 h-3" />
-              <span>Your input says</span>
+              <span>Your CV says</span>
             </span>
             {hasEvidence ? (
               requirement.candidateEvidence.map((evidence, i) => (
-                <p
-                  key={i}
-                  className="text-emerald-200/90 italic leading-relaxed"
-                >
+                <p key={i} className="text-emerald-200/90 italic leading-relaxed">
                   &ldquo;{evidence.quote}&rdquo;
                 </p>
               ))
             ) : (
-              <p className="text-slate-400">
-                No evidence found in your input.
-              </p>
+              <p className="text-slate-400">Nothing in your CV covers this.</p>
             )}
           </div>
 
-          {/* Rationale */}
           <div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
               Why
@@ -285,10 +373,9 @@ const RequirementCard: React.FC<{ requirement: Requirement; defaultOpen: boolean
             </p>
           </div>
 
-          {/* Action */}
           {requirement.action && (
             <div className="p-2.5 rounded-lg bg-sky-950/40 border border-sky-900/60 flex items-start space-x-2">
-              <FileWarning className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
+              <Target className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
               <p className="text-sky-200/90 leading-relaxed">{requirement.action}</p>
             </div>
           )}
@@ -308,38 +395,6 @@ const RequirementCard: React.FC<{ requirement: Requirement; defaultOpen: boolean
 };
 
 // ---------------------------------------------------------------------------
-// Counts strip (numbers of items only - not a score)
-// ---------------------------------------------------------------------------
-
-const CountsStrip: React.FC<{ brief: AlignmentBrief }> = ({ brief }) => {
-  const entries: Array<[EvidenceStatus, number]> = [
-    ['supported', brief.counts.supported],
-    ['transferable', brief.counts.transferable],
-    ['missing', brief.counts.missing],
-    ['unknown', brief.counts.unknown],
-    ['hard_constraint', brief.counts.hard_constraint],
-  ];
-  const meta = STATUS_META;
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-xs">
-      <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
-        Totals
-      </span>
-      {entries.map(([status, count]) => (
-        <span
-          key={status}
-          className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border font-semibold ${meta[status].badge}`}
-        >
-          {meta[status].icon}
-          <span>{meta[status].label}</span>
-          <span className="font-mono font-bold">{count}</span>
-        </span>
-      ))}
-    </div>
-  );
-};
-
-// ---------------------------------------------------------------------------
 // Main renderer
 // ---------------------------------------------------------------------------
 
@@ -352,20 +407,16 @@ export const AlignmentBriefRenderer: React.FC<{ brief: AlignmentBrief }> = ({
   const preferred = brief.requirements.filter(
     (r) => r.importance !== 'mandatory',
   );
-  const unknowns = [...brief.requirements, ...brief.hardConstraints].filter(
-    (r) => r.status === 'unknown',
-  );
+  const all = [...brief.requirements, ...brief.hardConstraints];
+  const unknowns = all.filter((r) => r.status === 'unknown');
 
   return (
     <div className="space-y-6">
       {/* Posting header */}
       <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-lg font-bold text-slate-100">
-            {brief.posting.title}
-          </h3>
-          <CountsStrip brief={brief} />
-        </div>
+        <h3 className="text-lg font-bold text-slate-100">
+          {brief.posting.title}
+        </h3>
         <p className="text-xs text-slate-400">
           {[brief.posting.organization, brief.posting.location, brief.posting.deadline]
             .filter(Boolean)
@@ -373,16 +424,18 @@ export const AlignmentBriefRenderer: React.FC<{ brief: AlignmentBrief }> = ({
         </p>
       </div>
 
-      <StatusLegend />
+      {/* Verdict + tally + plain-words summary */}
+      <SummarySection brief={brief} />
 
-      <CriticalGaps brief={brief} />
+      {/* Gaps first - the action area */}
+      <GapWarnings brief={brief} />
 
-      {/* Hard constraints first */}
+      {/* Hard constraints - licences etc. */}
       {brief.hardConstraints.length > 0 && (
         <section className="space-y-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center space-x-1.5">
             <ShieldAlert className="w-4 h-4" />
-            <span>Hard constraints - verify these with the official source</span>
+            <span>Verify with the official source</span>
           </h3>
           {brief.hardConstraints.map((req) => (
             <RequirementCard key={req.id} requirement={req} defaultOpen />
@@ -406,7 +459,7 @@ export const AlignmentBriefRenderer: React.FC<{ brief: AlignmentBrief }> = ({
       {preferred.length > 0 && (
         <section className="space-y-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-            Preferred requirements
+            Preferred / nice-to-have
           </h3>
           {preferred.map((req) => (
             <RequirementCard key={req.id} requirement={req} defaultOpen={false} />
@@ -421,12 +474,55 @@ export const AlignmentBriefRenderer: React.FC<{ brief: AlignmentBrief }> = ({
         </div>
       )}
 
+      {/* Areas to strengthen */}
+      {(() => {
+        const strengthen = all.filter(
+          (r) =>
+            r.status === 'transferable' ||
+            (r.importance !== 'mandatory' && (r.status === 'missing' || r.status === 'unknown')),
+        );
+        if (strengthen.length === 0) return null;
+        return (
+          <section className="p-5 rounded-2xl bg-sky-950/20 border border-sky-900/60 space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-sky-300 flex items-center space-x-1.5">
+              <Scale className="w-4 h-4" />
+              <span>Areas to strengthen - close these before applying</span>
+            </h3>
+            <ul className="space-y-2.5">
+              {strengthen.map((req) => (
+                <li
+                  key={`strength-${req.id}`}
+                  className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs space-y-2"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={req.status} />
+                    <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">
+                      {req.type} · {req.importance}
+                    </span>
+                  </div>
+                  <p className="text-slate-100 font-semibold leading-snug">{req.text}</p>
+                  {req.rationale && (
+                    <p className="text-slate-400 leading-relaxed">{req.rationale}</p>
+                  )}
+                  {req.action && (
+                    <div className="pt-1 border-t border-slate-800/70 flex items-start space-x-2">
+                      <Target className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
+                      <p className="text-sky-200/90 leading-relaxed">{req.action}</p>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })()}
+
       {/* Needs verification area for unknowns */}
       {unknowns.length > 0 && (
         <section className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
             <HelpCircle className="w-4 h-4 text-slate-400" />
-            <span>Needs verification - your input was silent on these</span>
+            <span>Needs verification - your CV was silent on these</span>
           </h3>
           <ul className="space-y-1.5 text-xs text-slate-300">
             {unknowns.map((req) => (
@@ -438,53 +534,22 @@ export const AlignmentBriefRenderer: React.FC<{ brief: AlignmentBrief }> = ({
           </ul>
           <p className="text-[11px] text-slate-500 leading-relaxed">
             Not determined does not mean missing. Add this information to your
-            input and analyze again, or verify it directly.
+            CV and analyze again, or verify it directly.
           </p>
-        </section>
-      )}
-
-      {/* NOC candidates - explicitly presented as candidates, never conclusions */}
-      {brief.interpretation.nocCandidates.length > 0 && (
-        <section className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
-            <Info className="w-4 h-4 text-sky-400" />
-            <span>Possible NOC 2021 classifications - candidates only, verify officially</span>
-          </h3>
-          <div className="space-y-2">
-            {brief.interpretation.nocCandidates.map((noc, i) => (
-              <div
-                key={`${noc.code}-${i}`}
-                className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs space-y-1"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono font-bold text-sky-300">
-                    NOC {noc.code}
-                  </span>
-                  <span className="text-slate-300">{noc.title}</span>
-                  <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[10px] font-semibold text-slate-400">
-                    {noc.confidence} confidence
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[10px] font-semibold text-slate-400">
-                    {noc.source === 'nocDatabase' ? 'from local reference list' : 'model suggested'}
-                  </span>
-                </div>
-                <p className="text-slate-400 leading-relaxed">{noc.rationale}</p>
-              </div>
-            ))}
-          </div>
         </section>
       )}
 
       {/* Assumptions */}
       {brief.assumptions.length > 0 && (
         <section className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-            Assumptions the analysis made
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
+            <Info className="w-3.5 h-3.5 text-slate-400" />
+            <span>Assumptions the analysis made</span>
           </h3>
           <ul className="space-y-1.5 text-xs text-slate-400">
             {brief.assumptions.map((a, i) => (
               <li key={i} className="flex items-start space-x-2">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                <span className="text-slate-500 mt-0.5">•</span>
                 <span className="leading-relaxed">{a}</span>
               </li>
             ))}
