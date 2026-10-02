@@ -28,8 +28,7 @@ Design rules enforced in code (see `server/schema.ts`, `server/analyze.ts`,
 1. You paste a job advert and your CV (or plain written statements).
 2. The server sends both to Groq's OpenAI-compatible API (`GROQ_API_KEY`,
    JSON mode) over a cascade of current production models:
-   `llama-3.3-70b-versatile` → `openai/gpt-oss-120b` → `openai/gpt-oss-20b`
-   → `llama-3.1-8b-instant`.
+   `openai/gpt-oss-120b` → `qwen/qwen3.8-27b` → `openai/gpt-oss-20b`.
 3. Every returned requirement is re-verified server-side: the advert quote
    must exist verbatim in the advert, and every evidence quote must exist
    verbatim in the text you supplied. Unsupported claims are downgraded to
@@ -45,14 +44,29 @@ npm run lint       # tsc --noEmit
 npm test           # vitest run
 ```
 
-Set your Groq API key for local dev either by creating a `.env` file:
+**You must set `GROQ_API_KEY` before the app can generate anything.** Without
+it every request returns `503 AI_UNAVAILABLE` and the report will never
+generate — this is the single most common cause of "it failed to generate".
+
+Get a key at https://console.groq.com/keys, then either create a local
+`.env` file:
 
 ```
 GROQ_API_KEY=your-key-here
 ```
 
-or by running `vercel env pull .env` after adding the key to your Vercel
-project. (`.env.example` shows the variable.)
+or run `vercel env pull .env` after adding the key to your Vercel project.
+(`.env.example` shows the variable.)
+
+Check the key is actually loaded before debugging anything else:
+
+```
+curl -s -X POST http://localhost:3000/api/analyze \
+  -H 'Content-Type: application/json' \
+  -d '{"postingText":"Driver role. Must hold a valid Class 1 licence.","candidateText":"I have driven trucks for 5 years."}'
+```
+
+A `503` means the key is missing or rejected; a `200` means generation works.
 
 ## Deploying to Vercel
 
