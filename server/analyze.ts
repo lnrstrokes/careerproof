@@ -35,7 +35,10 @@ export async function runAnalysis(
 ): Promise<AlignmentBrief> {
   const { input, normalizedPosting } = validateAnalyzeInput(body);
 
-  const prompt = buildUserPrompt(input);
+  // Imported dynamically to avoid a client-bundle dependency on the data file.
+  const { NOC_2021_REFERENCE } = await import('../src/data/nocDatabase');
+
+  const prompt = buildUserPrompt(input, NOC_2021_REFERENCE);
 
   const { brief: modelBrief, modelUsed } = await generateStructured(
     SYSTEM_INSTRUCTION,
@@ -75,10 +78,9 @@ export async function runAnalysis(
     );
   }
 
-  // 2. NOC integrity: unknown codes become 'model_asserted' with confidence
-  //    capped at 'low' plus an unresolvedQuestion. Import here to avoid a
-  //    client-bundle dependency on the database file.
-  const { NOC_2021_REFERENCE } = await import('../src/data/nocDatabase');
+  // 2. NOC integrity: codes not present in the reference list the model was
+  //    shown become 'model_asserted' with confidence capped at 'low' plus an
+  //    unresolvedQuestion pointing at official verification.
   const { nocCandidates, extraUnresolvedQuestions } = enforceNocIntegrity(
     modelBrief.interpretation.nocCandidates,
     NOC_2021_REFERENCE.map((noc) => noc.code),

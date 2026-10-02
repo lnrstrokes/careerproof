@@ -133,3 +133,9 @@ official dataset and a link to each entry's official ESDC profile. Informal
 "common job titles" labels are search helpers only. NOC codes shown in a brief
 are candidates to verify against the official Government of Canada NOC, never
 conclusions.
+
+The analysis prompt includes every reference entry's code, official title, and
+TEER, so NOC suggestions are grounded in this set: a `nocDatabase`-sourced
+candidate always comes from the list, while any code the model suggests from
+outside it is downgraded to a low-confidence model suggestion and flagged for
+official verification.
