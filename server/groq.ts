@@ -11,6 +11,7 @@
  */
 import { AnalysisError } from './schema';
 import { alignmentBriefSchema, type AlignmentBrief } from './schema';
+import { z } from 'zod';
 
 const GROQ_BASE_URL =
   (process.env.GROQ_BASE_URL ?? 'https://api.groq.com/openai/v1').replace(
@@ -34,6 +35,19 @@ export const MODEL_CASCADE = [
 
 export const GENERATION_TEMPERATURE = 0.2;
 export const MAX_OUTPUT_TOKENS = 8192;
+
+/**
+ * JSON Schema emitted from the same zod contract the output is validated
+ * against. Groq's json_object mode guarantees valid JSON but not the SHAPE,
+ * so the schema is embedded in the prompt - without it every model guesses
+ * field names and structures and the brief is discarded as AI_INVALID_OUTPUT.
+ * Computed once at module load; unrepresentable: "any" is defensive (this
+ * schema is plain objects/enums/arrays and needs no leniency).
+ */
+const BRIEF_JSON_SCHEMA = z.toJSONSchema(alignmentBriefSchema, {
+  io: 'output',
+  unrepresentable: 'any',
+});
 const ATTEMPTS_PER_MODEL = 3;
 const RETRY_DELAY_MS = 500;
 const REQUEST_TIMEOUT_MS = 45_000;
@@ -114,7 +128,10 @@ async function callGroqOnce(
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemInstruction },
-        { role: 'user', content: userPrompt },
+        {
+          role: 'user',
+          content: `${userPrompt}\n\nThe output must validate against this JSON Schema exactly. Include every field listed in "required"; use null only where the schema allows it. Do not add fields that are not in the schema:\n${JSON.stringify(BRIEF_JSON_SCHEMA)}`,
+        },
       ],
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -144,9 +161,9 @@ async function callGroqOnce(
 
 /**
  * Runs the model cascade over Groq. Every model receives the IDENTICAL
- * request shape and every response is validated against the SAME zod schema;
- * a schema failure counts as that model failing. Throws AnalysisError 503
- * when all attempts fail.
+ * request shape (prompt + embedded JSON Schema, json_object mode) and every
+ * response is validated against the SAME zod schema; a schema failure counts
+ * as that model failing. Throws AnalysisError 503 when all attempts fail.
  */
 export async function generateStructured(
   systemInstruction: string,
