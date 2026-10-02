@@ -13,7 +13,7 @@ import {
 
 vi.mock('./groq', () => ({
   generateStructured: vi.fn(),
-  MODEL_CASCADE: ['llama-3.3-70b-versatile'],
+  MODEL_CASCADE: ['openai/gpt-oss-120b'],
   GENERATION_TEMPERATURE: 0.2,
   MAX_OUTPUT_TOKENS: 8192,
 }));
@@ -256,6 +256,35 @@ describe('quote integrity gate', () => {
       unknown: 1,
       hard_constraint: 1,
     });
+  });
+
+  it('moves licence/location/schedule/work-authorization requirements into hard constraints even when the model marks them supported', async () => {
+    generateStructuredMock.mockResolvedValue({
+      brief: baseBriefResponse([
+        makeRequirement({
+          id: 'req-lic',
+          type: 'licence',
+          status: 'supported',
+          sourceQuote: 'a forklift operator with a valid Class 1 licence',
+          candidateEvidence: [
+            { quote: 'I hold a valid Class 1 licence', spanStart: 0, spanEnd: 0 },
+          ],
+        }),
+        makeRequirement({ id: 'req-skill' }),
+      ]),
+      modelUsed: 'test-model',
+    });
+
+    const brief = await runAnalysis(VALID_BODY);
+    // The licence requirement must not appear in requirements at all.
+    expect(brief.requirements.map((r) => r.id)).toEqual(['req-skill']);
+    // It lands in hardConstraints with the hard_constraint status, keeping
+    // its (verified) evidence quote as display context.
+    const moved = brief.hardConstraints.find((r) => r.id === 'req-lic');
+    expect(moved?.status).toBe('hard_constraint');
+    expect(moved?.candidateEvidence).toHaveLength(1);
+    expect(brief.counts.hard_constraint).toBe(1);
+    expect(brief.counts.supported).toBe(1);
   });
 
   it('the serialized brief contains no score-like field or percentage', async () => {

@@ -434,10 +434,21 @@ export function computeCounts(
   return counts;
 }
 
+/** Requirement types that must always be hard constraints, regardless of
+ *  what the model decided: their truth cannot be established from text. */
+const HARD_CONSTRAINT_TYPES: ReadonlySet<Requirement['type']> = new Set([
+  'licence',
+  'work_authorization',
+  'location',
+  'schedule',
+]);
+
 /**
  * Enforces every quote-integrity rule against the normalized advert and
  * candidate text. Drops invalid requirements/evidence, downgrades unsupported
- * 'supported' statuses, recomputes counts, and flags catastrophic failures.
+ * 'supported' statuses, moves licence/work-authorization/location/schedule
+ * requirements into hard constraints (the model does not do this reliably),
+ * recomputes counts, and flags catastrophic failures.
  */
 export function enforceQuoteIntegrity(
   requirements: Requirement[],
@@ -489,6 +500,23 @@ export function enforceQuoteIntegrity(
   const validatedRequirements = process(requirements);
   const validatedHardConstraints = process(hardConstraints);
 
+  // Deterministic hard-constraint rule: a licence, work-authorization,
+  // location, or schedule requirement can never be 'supported' by quoted
+  // text - only the official source can confirm it. Move any such item the
+  // model placed in requirements over to hardConstraints, keeping valid
+  // evidence quotes as display context.
+  const movedHardConstraints: Requirement[] = [];
+  const keptRequirements: Requirement[] = [];
+  for (const req of validatedRequirements) {
+    if (HARD_CONSTRAINT_TYPES.has(req.type)) {
+      movedHardConstraints.push({ ...req, status: 'hard_constraint' });
+    } else {
+      keptRequirements.push(req);
+    }
+  }
+  const finalRequirements = keptRequirements;
+  const finalHardConstraints = [...validatedHardConstraints, ...movedHardConstraints];
+
   const totalSubmitted = requirements.length + hardConstraints.length;
   const failedRequirementCount = dropped.length;
 
@@ -504,9 +532,9 @@ export function enforceQuoteIntegrity(
   }
 
   return {
-    requirements: validatedRequirements,
-    hardConstraints: validatedHardConstraints,
-    counts: computeCounts(validatedRequirements, validatedHardConstraints),
+    requirements: finalRequirements,
+    hardConstraints: finalHardConstraints,
+    counts: computeCounts(finalRequirements, finalHardConstraints),
     droppedRequirementCount: failedRequirementCount,
     failedRequirementCount,
   };
