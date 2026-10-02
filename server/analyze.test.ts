@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AlignmentBrief, Requirement } from './schema';
 import {
   MAX_TEXT_FIELD_LENGTH,
+  AnalysisError,
   assertNoScores,
   enforceQuoteIntegrity,
   normalizeText,
@@ -310,6 +311,114 @@ describe('quote integrity gate', () => {
       makeRequirement({ rationale: 'You match 90 percent of this role.' }),
     ]);
     expect(() => assertNoScores(poisoned)).toThrow();
+  });
+
+  it('a supported requirement with an unverifiable quote is downgraded to unknown, not trusted', () => {
+    // The model claims "supported" but the quote is not in the CV. The gate
+    // must strip it and downgrade, so the UI never shows an unbacked proof.
+    const forged = enforceQuoteIntegrity(
+      [
+        makeRequirement({
+          id: 'req-forged',
+          status: 'supported',
+          candidateEvidence: [
+            { quote: 'I hold an ACLS certification', spanStart: 0, spanEnd: 0 },
+          ],
+        }),
+      ],
+      [],
+      normalizeText(POSTING),
+      normalizeText(CANDIDATE),
+    );
+    expect(forged.requirements[0].status).toBe('unknown');
+    expect(forged.requirements[0].candidateEvidence).toHaveLength(0);
+    expect(forged.counts.supported).toBe(0);
+    expect(forged.counts.unknown).toBe(1);
+  });
+
+  it('a transferable requirement with no valid evidence quote is downgraded to unknown', () => {
+    const downgraded = enforceQuoteIntegrity(
+      [
+        makeRequirement({
+          id: 'req-t',
+          status: 'transferable',
+          candidateEvidence: [
+            { quote: 'unrelated text absent from the CV entirely', spanStart: 0, spanEnd: 0 },
+          ],
+        }),
+      ],
+      [],
+      normalizeText(POSTING),
+      normalizeText(CANDIDATE),
+    );
+    expect(downgraded.requirements[0].status).toBe('unknown');
+  });
+
+  it('counts stay consistent with the final requirement arrays after the gate', () => {
+    const result = enforceQuoteIntegrity(
+      [
+        makeRequirement({ id: 'a', status: 'supported' }),
+        makeRequirement({
+          id: 'b',
+          status: 'transferable',
+          candidateEvidence: [
+            {
+              quote: 'I have worked 5 years as a warehouse associate at a food distributor.',
+              spanStart: 0,
+              spanEnd: 0,
+            },
+          ],
+        }),
+        makeRequirement({ id: 'c', type: 'location', status: 'supported' }),
+      ],
+      [],
+      normalizeText(POSTING),
+      normalizeText(CANDIDATE),
+    );
+    const final = [...result.requirements, ...result.hardConstraints];
+    const tally = (s: string) => final.filter((r) => r.status === s).length;
+    expect(result.counts.supported).toBe(tally('supported'));
+    expect(result.counts.transferable).toBe(tally('transferable'));
+    expect(result.counts.hard_constraint).toBe(tally('hard_constraint'));
+    expect(result.counts.missing).toBe(tally('missing'));
+    expect(result.counts.unknown).toBe(tally('unknown'));
+    // The location requirement is force-moved out of requirements.
+    expect(result.requirements.map((r) => r.id)).not.toContain('c');
+    expect(result.hardConstraints.map((r) => r.id)).toContain('c');
+  });
+
+  it('a sourceQuote absent from the advert is dropped while valid ones survive', () => {
+    // One bad quote among several stays under the 30% discard threshold, so
+    // the bad item is dropped and the rest of the brief is still served.
+    const dropped = enforceQuoteIntegrity(
+      [
+        makeRequirement({ id: 'good-1' }),
+        makeRequirement({ id: 'good-2' }),
+        makeRequirement({ id: 'good-3' }),
+        makeRequirement({ id: 'x', sourceQuote: 'This sentence is nowhere in the advert.' }),
+      ],
+      [],
+      normalizeText(POSTING),
+      normalizeText(CANDIDATE),
+    );
+    expect(dropped.requirements.map((r) => r.id)).toEqual(['good-1', 'good-2', 'good-3']);
+    expect(dropped.droppedRequirementCount).toBe(1);
+  });
+
+  it('a fabricated sourceQuote on every requirement discards the brief entirely', () => {
+    // Guards the no-fallback-content contract: a wholly fabricated brief must
+    // raise, never be served with empty or placeholder content.
+    expect(() =>
+      enforceQuoteIntegrity(
+        [
+          makeRequirement({ id: 'x', sourceQuote: 'fabricated advert line one' }),
+          makeRequirement({ id: 'y', sourceQuote: 'fabricated advert line two' }),
+        ],
+        [],
+        normalizeText(POSTING),
+        normalizeText(CANDIDATE),
+      ),
+    ).toThrow(AnalysisError);
   });
 });
 

@@ -21,12 +21,24 @@ import type { AlignmentBrief, EvidenceStatus, Requirement } from '../types';
 
 const STATUS_META: Record<
   EvidenceStatus,
-  { label: string; plain: string; badge: string; icon: React.ReactNode }
+  {
+    label: string;
+    plain: string;
+    badge: string;
+    /**
+     * Tally-tile background. These must stay literal class strings in the
+     * source: Tailwind v4 scans source text for whole class tokens, so a
+     * background assembled at runtime (e.g. `${color}/40`) is never generated.
+     */
+    tile: string;
+    icon: React.ReactNode;
+  }
 > = {
   supported: {
     label: 'Supported',
     plain: 'Your own text, quoted below, shows you meet this requirement.',
     badge: 'bg-emerald-950 text-emerald-300 border-emerald-800',
+    tile: 'bg-emerald-950/40 border-emerald-800',
     icon: <CheckCircle2 className="w-3.5 h-3.5" />,
   },
   transferable: {
@@ -34,6 +46,7 @@ const STATUS_META: Record<
     plain:
       'Your quoted experience is close, but not a direct match. Read the rationale.',
     badge: 'bg-sky-950 text-sky-300 border-sky-800',
+    tile: 'bg-sky-950/40 border-sky-800',
     icon: <Scale className="w-3.5 h-3.5" />,
   },
   missing: {
@@ -41,6 +54,7 @@ const STATUS_META: Record<
     plain:
       'The advert requires this AND your own text shows you do not meet it.',
     badge: 'bg-red-950 text-red-300 border-red-800',
+    tile: 'bg-red-950/40 border-red-800',
     icon: <Ban className="w-3.5 h-3.5" />,
   },
   unknown: {
@@ -48,6 +62,7 @@ const STATUS_META: Record<
     plain:
       'Your CV says nothing about this. That is not the same as missing it.',
     badge: 'bg-slate-800 text-slate-300 border-slate-600',
+    tile: 'bg-slate-800/40 border-slate-600',
     icon: <HelpCircle className="w-3.5 h-3.5" />,
   },
   hard_constraint: {
@@ -55,6 +70,7 @@ const STATUS_META: Record<
     plain:
       'Licences, work authorization, location, and schedules cannot be proven from text. Check with the official source.',
     badge: 'bg-amber-950 text-amber-300 border-amber-800',
+    tile: 'bg-amber-950/40 border-amber-800',
     icon: <ShieldAlert className="w-3.5 h-3.5" />,
   },
 };
@@ -132,9 +148,10 @@ const SummarySection: React.FC<{ brief: AlignmentBrief }> = ({ brief }) => {
     (r) => r.status === 'hard_constraint',
   ).length;
 
-  const mandatoryCovered = mandatory.filter(
-    (r) => r.status === 'supported' || r.status === 'transferable',
-  );
+  // "proves" must mean proven: 'transferable' is by definition NOT a direct
+  // match and is already listed under "Areas to strengthen". Including it here
+  // would show the same requirement as both proven and outstanding.
+  const mandatoryCovered = mandatory.filter((r) => r.status === 'supported');
 
   const verdictIcon =
     verdict.tone === 'ready' ? (
@@ -173,7 +190,7 @@ const SummarySection: React.FC<{ brief: AlignmentBrief }> = ({ brief }) => {
           return (
             <div
               key={status}
-              className={`p-3 rounded-xl border ${meta.badge.split(' ').slice(0, 1).join(' ')} bg-opacity-40 flex flex-col items-center text-center space-y-0.5`}
+              className={`p-3 rounded-xl border ${meta.tile} flex flex-col items-center text-center space-y-0.5`}
             >
               {meta.icon}
               <span className="text-xl font-black leading-none">{count}</span>
@@ -249,8 +266,11 @@ const SummarySection: React.FC<{ brief: AlignmentBrief }> = ({ brief }) => {
 
 const GapWarnings: React.FC<{ brief: AlignmentBrief }> = ({ brief }) => {
   const all = [...brief.requirements, ...brief.hardConstraints];
+  // Only 'missing' is a gap. 'unknown' items are reported in their own
+  // "Needs verification" section - listing them under a red "Gaps" heading
+  // would contradict the note that says the two are not the same.
   const gaps = all.filter(
-    (r) => r.importance === 'mandatory' && (r.status === 'missing' || r.status === 'unknown'),
+    (r) => r.importance === 'mandatory' && r.status === 'missing',
   );
 
   if (gaps.length === 0) return null;
@@ -293,9 +313,8 @@ const GapWarnings: React.FC<{ brief: AlignmentBrief }> = ({ brief }) => {
         ))}
       </ul>
       <p className="text-[11px] text-slate-500 leading-relaxed">
-        &ldquo;Not determined&rdquo; is not the same as missing: it means your CV was
-        silent. If you have the evidence, add it to your CV and analyze again - the
-        status only changes when it can quote you.
+        Requirements your CV is merely silent about are not listed here - those
+        appear under &ldquo;Needs verification&rdquo; below.
       </p>
     </section>
   );
@@ -360,7 +379,11 @@ const RequirementCard: React.FC<{ requirement: Requirement; defaultOpen: boolean
                 </p>
               ))
             ) : (
-              <p className="text-slate-400">Nothing in your CV covers this.</p>
+              <p className="text-slate-400">
+                {requirement.status === 'hard_constraint'
+                  ? 'This cannot be established from CV text. Check it with the official source.'
+                  : 'Nothing in your CV covers this.'}
+              </p>
             )}
           </div>
 
