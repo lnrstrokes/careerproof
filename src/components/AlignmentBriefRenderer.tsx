@@ -1,19 +1,50 @@
 import React, { useState } from 'react';
 import {
+  Award,
   Ban,
+  Briefcase,
+  CalendarClock,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  FileText,
   FileWarning,
+  GraduationCap,
   HelpCircle,
   Info,
+  Languages,
+  Layers,
+  MapPin,
+  Quote,
   Scale,
   ShieldAlert,
-  Quote,
+  ShieldCheck,
   Sparkles,
   Target,
+  Users,
+  Wrench,
 } from 'lucide-react';
 import type { AlignmentBrief, EvidenceStatus, Requirement } from '../types';
+import {
+  categoryFor,
+  groupByCategory,
+  importanceTally,
+  type CategoryIconKey,
+} from './requirementCategories';
+
+/** Icon per category. Kept here so requirementCategories.ts stays React-free. */
+const CATEGORY_ICONS: Record<CategoryIconKey, React.ReactNode> = {
+  shieldCheck: <ShieldCheck className="w-4 h-4" />,
+  graduationCap: <GraduationCap className="w-4 h-4" />,
+  award: <Award className="w-4 h-4" />,
+  briefcase: <Briefcase className="w-4 h-4" />,
+  users: <Users className="w-4 h-4" />,
+  wrench: <Wrench className="w-4 h-4" />,
+  languages: <Languages className="w-4 h-4" />,
+  mapPin: <MapPin className="w-4 h-4" />,
+  calendarClock: <CalendarClock className="w-4 h-4" />,
+  fileText: <FileText className="w-4 h-4" />,
+};
 
 // ---------------------------------------------------------------------------
 // Status metadata (plain language, no scores anywhere)
@@ -324,10 +355,15 @@ const GapWarnings: React.FC<{ brief: AlignmentBrief }> = ({ brief }) => {
 // Requirement card
 // ---------------------------------------------------------------------------
 
-const RequirementCard: React.FC<{ requirement: Requirement; defaultOpen: boolean }> = ({
-  requirement,
-  defaultOpen,
-}) => {
+const RequirementCard: React.FC<{
+  requirement: Requirement;
+  defaultOpen: boolean;
+  /**
+   * False when the card already sits under a category heading, so the raw
+   * type is not repeated twice in the same view.
+   */
+  showCategory?: boolean;
+}> = ({ requirement, defaultOpen, showCategory = true }) => {
   const [open, setOpen] = useState(defaultOpen);
   const hasEvidence = requirement.candidateEvidence.length > 0;
 
@@ -341,7 +377,8 @@ const RequirementCard: React.FC<{ requirement: Requirement; defaultOpen: boolean
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={requirement.status} />
             <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">
-              {requirement.type} · {requirement.importance}
+              {showCategory && `${categoryFor(requirement.type).label} · `}
+              {requirement.importance}
             </span>
           </div>
           <p className="text-sm font-semibold text-slate-100 leading-snug">
@@ -424,12 +461,6 @@ const RequirementCard: React.FC<{ requirement: Requirement; defaultOpen: boolean
 export const AlignmentBriefRenderer: React.FC<{ brief: AlignmentBrief }> = ({
   brief,
 }) => {
-  const mandatory = brief.requirements.filter(
-    (r) => r.importance === 'mandatory',
-  );
-  const preferred = brief.requirements.filter(
-    (r) => r.importance !== 'mandatory',
-  );
   const all = [...brief.requirements, ...brief.hardConstraints];
   const unknowns = all.filter((r) => r.status === 'unknown');
 
@@ -460,33 +491,65 @@ export const AlignmentBriefRenderer: React.FC<{ brief: AlignmentBrief }> = ({
             <ShieldAlert className="w-4 h-4" />
             <span>Verify with the official source</span>
           </h3>
-          {brief.hardConstraints.map((req) => (
-            <RequirementCard key={req.id} requirement={req} defaultOpen />
-          ))}
+          {groupByCategory(brief.hardConstraints).map(
+            ({ category, items }) => (
+              <div key={category.label} className="space-y-2.5">
+                <h4 className="flex items-center space-x-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-200/70">
+                  {CATEGORY_ICONS[category.iconKey]}
+                  <span>{category.label}</span>
+                  <span className="text-amber-300/40 normal-case font-normal tracking-normal">
+                    ({items.length})
+                  </span>
+                </h4>
+                {items.map((req) => (
+                  <RequirementCard
+                    key={req.id}
+                    requirement={req}
+                    defaultOpen
+                    showCategory={false}
+                  />
+                ))}
+              </div>
+            ),
+          )}
         </section>
       )}
 
-      {/* Mandatory requirements */}
-      {mandatory.length > 0 && (
-        <section className="space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-            Mandatory requirements
+      {/* Requirements, grouped by category */}
+      {brief.requirements.length > 0 && (
+        <section className="space-y-5">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
+            <Layers className="w-4 h-4" />
+            <span>Requirements by category</span>
           </h3>
-          {mandatory.map((req) => (
-            <RequirementCard key={req.id} requirement={req} defaultOpen={false} />
-          ))}
-        </section>
-      )}
-
-      {/* Preferred requirements */}
-      {preferred.length > 0 && (
-        <section className="space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-            Preferred / nice-to-have
-          </h3>
-          {preferred.map((req) => (
-            <RequirementCard key={req.id} requirement={req} defaultOpen={false} />
-          ))}
+          {groupByCategory(brief.requirements).map(({ category, items }) => {
+            const { mandatory, preferred } = importanceTally(items);
+            return (
+              <div key={category.label} className="space-y-2.5">
+                <div className="flex items-baseline space-x-2 flex-wrap">
+                  <h4 className="flex items-center space-x-1.5 text-xs font-bold text-slate-200">
+                    {CATEGORY_ICONS[category.iconKey]}
+                    <span>{category.label}</span>
+                  </h4>
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">
+                    {mandatory} mandatory
+                    {preferred > 0 && `, ${preferred} preferred`}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 -mt-1.5">
+                  {category.blurb}
+                </p>
+                {items.map((req) => (
+                  <RequirementCard
+                    key={req.id}
+                    requirement={req}
+                    defaultOpen={false}
+                    showCategory={false}
+                  />
+                ))}
+              </div>
+            );
+          })}
         </section>
       )}
 
