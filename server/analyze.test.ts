@@ -19,7 +19,7 @@ vi.mock('./groq', () => ({
 }));
 
 vi.mock('../src/data/nocDatabase', () => ({
-  NOC_2021_REFERENCE: [{ code: '21232', title: 'Software developers and programmers', teer: 1, category: '2', categoryLabel: 'Natural and applied sciences and related occupations', leadStatement: 'x', exampleTitles: [], profileUrl: 'https://noc.esdc.gc.ca' }],
+  NOC_2021_REFERENCE: [{ code: '31301', title: 'Registered nurses and registered psychiatric nurses', teer: 1, category: '3', categoryLabel: 'Health occupations', leadStatement: 'x', exampleTitles: [], profileUrl: 'https://noc.esdc.gc.ca' }],
 }));
 
 import { runAnalysis } from './analyze';
@@ -281,6 +281,69 @@ describe('quote integrity gate', () => {
       makeRequirement({ rationale: 'You match 90 percent of this role.' }),
     ]);
     expect(() => assertNoScores(poisoned)).toThrow();
+  });
+});
+
+describe('NOC reference grounding', () => {
+  it('supplies the curated NOC reference list to the model prompt', async () => {
+    generateStructuredMock.mockResolvedValue({
+      brief: baseBriefResponse([]),
+      modelUsed: 'test-model',
+    });
+    await runAnalysis(VALID_BODY);
+
+    expect(generateStructuredMock).toHaveBeenCalledTimes(1);
+    const [system, user] = generateStructuredMock.mock.calls[0];
+    // The system prompt describes the list as supplied in the user prompt...
+    expect(system).toContain('<noc_reference_list>');
+    // ...and the user prompt actually contains it, one verified entry per line.
+    expect(user).toContain('<noc_reference_list>');
+    expect(user).toContain(
+      '31301 - Registered nurses and registered psychiatric nurses (TEER 1)',
+    );
+  });
+
+  it('passes reference-list NOC candidates through unchanged and downgrades unknown codes', async () => {
+    generateStructuredMock.mockResolvedValue({
+      brief: baseBriefResponse([]),
+      modelUsed: 'test-model',
+    });
+    // Simulate the model response carrying NOC candidates by letting the
+    // zod schema parse them through the mocked generateStructured output.
+    generateStructuredMock.mockImplementation(async () => ({
+      brief: {
+        ...baseBriefResponse([]),
+        interpretation: {
+          likelyOccupationTitle: null,
+          nocCandidates: [
+            {
+              code: '31301',
+              title: 'Registered nurses and registered psychiatric nurses',
+              confidence: 'high' as const,
+              rationale: 'Candidate CV states registered nurse licensure.',
+              source: 'nocDatabase' as const,
+            },
+            {
+              code: '99999',
+              title: 'Occupation the model invented',
+              confidence: 'medium' as const,
+              rationale: 'A guess from model memory.',
+              source: 'nocDatabase' as const,
+            },
+          ],
+          ambiguityNotes: [],
+        },
+      },
+      modelUsed: 'test-model',
+    }));
+
+    const brief = await runAnalysis(VALID_BODY);
+    const [inList, notInList] = brief.interpretation.nocCandidates;
+    // In the reference list: kept exactly as the model claimed.
+    expect(inList).toMatchObject({ code: '31301', source: 'nocDatabase', confidence: 'high' });
+    // Not in the list: downgraded and flagged for official verification.
+    expect(notInList).toMatchObject({ code: '99999', source: 'model_asserted', confidence: 'low' });
+    expect(brief.unresolvedQuestions.join(' ')).toContain('99999');
   });
 });
 
